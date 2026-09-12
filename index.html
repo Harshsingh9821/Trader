@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DDLJ | Advanced Vending System</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    <style>
+        :root {
+            --bg-color: #0b1120;
+            --card-bg: #1e293b;
+            --panel-bg: #0f172a;
+            --primary: #3b82f6;
+            --primary-hover: #2563eb;
+            --danger: #ef4444;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --text-main: #f8fafc;
+            --text-muted: #64748b;
+            --border-color: #334155;
+            --accent: #8b5cf6;
+        }
+
+        * { box-sizing: border-box; font-family: 'Inter', 'Segoe UI', sans-serif; }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            min-height: 100vh;
+        }
+
+        .dashboard {
+            width: 100%;
+            max-width: 1300px;
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 20px;
+            background: var(--card-bg);
+            padding: 20px;
+            border-radius: 16px;
+            box-shadow: 0 15px 35px rgba(0,0,0,0.4);
+        }
+
+        @media (min-width: 1024px) {
+            .dashboard { grid-template-columns: 500px 1fr; }
+        }
+
+        /* --- STATS PANEL --- */
+        .stats-container {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        .stat-box {
+            background: var(--panel-bg);
+            padding: 12px;
+            border-radius: 10px;
+            border: 1px solid var(--border-color);
+            text-align: center;
+        }
+        .stat-box span { display: block; font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; font-weight: bold; margin-bottom: 4px; letter-spacing: 0.5px; }
+        .stat-box strong { font-size: 1.4rem; color: var(--text-main); }
+        .stat-box.s-acc strong { color: var(--success); }
+        .stat-box.s-dec strong { color: var(--danger); }
+
+        /* --- CONTROLS --- */
+        .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 12px; margin-bottom: 15px; }
+        .header h2 { margin: 0; font-size: 1.3rem; color: var(--primary); display: flex; align-items: center; gap: 10px; }
+        
+        .status-badge { padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: bold; background: #334155; color: #cbd5e1; }
+        .status-badge.online { background: rgba(16, 185, 129, 0.2); color: var(--success); border: 1px solid var(--success); }
+
+        .input-group { margin-bottom: 12px; }
+        .input-group label { display: block; font-size: 0.8rem; font-weight: 600; color: var(--text-muted); margin-bottom: 5px; }
+        input[type="text"], input[type="number"], select {
+            width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border-color);
+            background: var(--bg-color); color: white; font-size: 0.9rem; transition: border 0.3s;
+        }
+        input:focus, select:focus { outline: none; border-color: var(--primary); }
+
+        .btn-group { display: flex; gap: 10px; margin-top: 15px; }
+        button { flex: 1; padding: 12px; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; transition: 0.2s; font-size: 0.9rem; color: white; }
+        .btn-start { background: var(--primary); }
+        .btn-start:hover { background: var(--primary-hover); }
+        .btn-stop { background: var(--danger); }
+        .btn-stop:hover { background: #dc2626; }
+        button:active { transform: translateY(2px); }
+
+        /* --- UI PANELS --- */
+        .section-title { font-size: 0.75rem; font-weight: bold; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; }
+        .panel-box { background: var(--panel-bg); border: 1px solid var(--border-color); padding: 15px; border-radius: 12px; margin-bottom: 15px; }
+
+        /* --- INDIVIDUALLY ADDRESSABLE ROUTES --- */
+        .route-set-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+        .route-actions { display: flex; gap: 10px; }
+        .route-actions a { color: var(--text-muted); font-size: 0.75rem; text-decoration: underline; cursor: pointer; transition: 0.2s; text-transform: uppercase; letter-spacing: 0.5px;}
+        .route-actions a:hover { color: var(--text-main); }
+        
+        .planet-scroll-area { max-height: 260px; overflow-y: auto; padding-right: 5px; display: flex; flex-direction: column; gap: 10px; }
+        .planet-scroll-area::-webkit-scrollbar { width: 6px; }
+        .planet-scroll-area::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+        
+        .route-group { border: 1px solid var(--border-color); border-radius: 10px; background: var(--bg-color); padding: 12px; }
+        .route-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid var(--border-color); padding-bottom: 8px; }
+        .route-title { font-weight: 600; font-size: 0.85rem; color: #f8fafc; }
+        .route-count { font-size: 0.75rem; color: var(--text-muted); font-family: monospace; }
+        
+        .route-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 15px; }
+        .checkbox-label { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; cursor: pointer; user-select: none; color: #cbd5e1; }
+        .checkbox-label input { width: 15px; height: 15px; accent-color: #0ea5e9; cursor: pointer; background-color: transparent; border-radius: 3px; }
+
+        /* --- TRADE RULES --- */
+        .rules-container { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+        .rule-row { display: flex; align-items: center; gap: 6px; background: var(--bg-color); padding: 8px; border-radius: 8px; border: 1px solid var(--border-color); flex-wrap: wrap; justify-content: center; }
+        .rule-row select { width: 110px; padding: 6px; font-size: 0.75rem; }
+        .rule-row input[type="number"] { width: 55px; padding: 6px; text-align: center; }
+        .rule-separator { font-weight: bold; color: var(--text-muted); font-size: 1rem; }
+
+        /* --- MAIN PANEL (CONSOLE & SETTINGS) --- */
+        .right-panel { display: flex; flex-direction: column; gap: 15px; }
+        
+        .settings-row { display: flex; justify-content: space-between; align-items: center; background: var(--panel-bg); padding: 12px 15px; border-radius: 10px; border: 1px solid var(--border-color); }
+        .settings-row span { font-size: 0.9rem; font-weight: 500; }
+
+        /* iOS Switch */
+        .switch { position: relative; display: inline-block; width: 44px; height: 22px; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #475569; transition: .3s; border-radius: 24px; }
+        .slider:before { position: absolute; content: ""; height: 16px; width: 16px; left: 3px; bottom: 3px; background-color: white; transition: .3s; border-radius: 50%; }
+        input:checked + .slider { background-color: var(--success); }
+        input:checked + .slider:before { transform: translateX(22px); }
+
+        #console {
+            background: #000; border-radius: 10px; padding: 15px; font-family: 'JetBrains Mono', 'Courier New', monospace; font-size: 0.8rem;
+            height: 550px; overflow-y: auto; border: 1px solid var(--border-color); display: flex; flex-direction: column; gap: 4px;
+        }
+        .log { line-height: 1.4; word-break: break-word; }
+        .log-time { color: #64748b; font-size: 0.7rem; margin-right: 6px; }
+        .log.info { color: #3b82f6; }
+        .log.success { color: #10b981; }
+        .log.error { color: #ef4444; }
+        .log.warning { color: #f59e0b; }
+        .log.system { color: #a855f7; }
+        .log.roam { color: #94a3b8; font-size: 0.75rem; }
+    </style>
+</head>
+<body>
+
+    <div class="dashboard">
+        <!-- LEFT PANEL: Controls, Routes & Rules -->
+        <div class="left-panel">
+            <div class="header">
+                <h2>warlord × VENDING</h2>
+                <span id="statusBadge" class="status-badge">OFFLINE</span>
+            </div>
+
+            <!-- STATS -->
+            <div class="stats-container">
+                <div class="stat-box"><span>Scanned</span><strong id="statScanned">0</strong></div>
+                <div class="stat-box s-acc"><span>Accepted</span><strong id="statAccepted">0</strong></div>
+                <div class="stat-box s-dec"><span>Declined</span><strong id="statDeclined">0</strong></div>
+            </div>
+
+            <div class="input-group">
+                <label>Recovery Code</label>
+                <input type="text" id="rc" placeholder="Enter 10-digit code" maxlength="10">
+            </div>
+
+            <div class="input-group">
+                <label>Spam Message</label>
+                <input type="text" id="messageText" placeholder="Trade with my advanced bot!" value="Trade with my vending bot!">
+            </div>
+
+            <div class="btn-group">
+                <button id="connect" class="btn-start">START BOT</button>
+                <button id="disconnect" class="btn-stop">STOP BOT</button>
+            </div>
+
+            <!-- INDIVIDUAL PLANETS ROUTE SET -->
+            <div class="panel-box mt-15" style="margin-top: 15px;">
+                <div class="route-set-header">
+                    <div class="section-title">Individually Addressable Route Set</div>
+                    <div class="route-actions">
+                        <a id="selectAllRoutes">Select all</a>
+                        <a id="clearAllRoutes">Clear</a>
+                    </div>
+                </div>
+                <div class="planet-scroll-area" id="routesContainer">
+                    <!-- Groups injected via JS -->
+                </div>
+            </div>
+
+            <div class="panel-box">
+                <div class="section-title">Trade Rules (6 Slots)</div>
+                <div id="rulesContainer" class="rules-container">
+                    <!-- Rules inserted by JS -->
+                </div>
+            </div>
+            
+            <input type="hidden" id="devtype" value="352">
+        </div>
+
+        <!-- RIGHT PANEL: Settings & Console -->
+        <div class="right-panel">
+            <div class="settings-row">
+                <span>Enable Scanner</span>
+                <label class="switch"><input type="checkbox" id="scannerToggle" checked><span class="slider"></span></label>
+            </div>
+
+            <div class="settings-row">
+                <div style="display: flex; flex-direction: column;">
+                    <span>Auto-Decline Invalid Trades</span>
+                    <span style="font-size: 0.7rem; color: var(--text-muted);">Rejects offers that don't match rules</span>
+                </div>
+                <label class="switch"><input type="checkbox" id="autoDeclineToggle" checked><span class="slider"></span></label>
+            </div>
+
+            <div class="settings-row">
+                <span>Roaming Speed: <span id="speedVal" style="color: var(--primary); font-weight: bold;">7s</span></span>
+                <input type="range" id="speedRange" min="3" max="60" value="7" style="width: 200px; accent-color: var(--primary);">
+            </div>
+
+            <div id="console">
+                <div class="log system"><span class="log-time">[SYS]</span> System initialized. Awaiting startup.</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- CONSTANTS & STATE ---
+        const baseUrl = 'https://galaxy.mobstudio.ru/services/';
+        const headers = {
+            'accept': '*/*',
+            'content-type': 'application/x-www-form-urlencoded',
+            'user-agent': 'Mozilla/5.0',
+            'origin': 'https://galaxy.mobstudio.ru',
+            'x-galaxy-client-ver': '9.5',
+            'x-galaxy-kbv': '352',
+            'x-galaxy-lng': 'en',
+            'x-galaxy-platform': 'web'
+        };
+
+        const ITEMS = [
+            { name: 'Clay', id: 1, aliases: ['clay'] },
+            { name: 'Skeleton Key', id: 4, aliases: ['skeleton key', 'skeleton'] },
+            { name: 'Diamond Key', id: 5, aliases: ['diamond skeleton key', 'diamond key'] },
+            { name: 'Explosive CB', id: 9, aliases: ['explosive cannon ball', 'explosive ball'] },
+            { name: 'Gold CB', id: 7, aliases: ['gold cannon ball'] },
+            { name: 'Green Ball', id: 11, aliases: ['green bowling ball', 'green ball'] },
+            { name: 'Red Ball', id: 12, aliases: ['red bowling ball', 'red ball'] },
+            { name: 'Electric Ball', id: 13, aliases: ['electric bowling ball', 'electric ball'] },
+            { name: 'Green Light', id: 3, aliases: ['green light'] },
+            { name: 'Bronze Ring', id: 14, aliases: ['bronze ring'] },
+            { name: 'Silver Ring', id: 15, aliases: ['silver ring'] },
+            { name: 'Gold Ring', id: 16, aliases: ['gold ring'] },
+            { name: 'Prison Escape', id: 10, aliases: ['prison escape', 'diamond prison escape'] },
+            { name: 'Fire CB', id: 8, aliases: ['fire cannon ball', 'fire cb'] }
+        ];
+
+        let state = {
+            ws: null,
+            userid: null,
+            password: null,
+            haaapsi: null,
+            roamInterval: null,
+            roamingList: [],
+            processedIds: new Set(),
+            stats: { scanned: 0, accepted: 0, declined: 0 }
+        };
+
+        // --- UI INITIALIZATION (ROUTES) ---
+        const routesContainer = document.getElementById('routesContainer');
+        const ROUTE_DATA = [
+            { id: 'ringtoss', title: 'RingToss', prefix: 'RingToss*', count: 20 },
+            { id: 'cannon', title: 'Cannon', prefix: 'Cannon*', count: 35 },
+            { id: 'bowling', title: 'Bowling', prefix: 'Bowling*', count: 30 }
+        ];
+        const CUSTOM_PLANETS = [
+            'МЕНЯЕМ❤️ДАРИМ', 'ПОМЕНЯЮ', 'PETS_GlFTS_TRADE', 'ПЛАНЕТА_ОБМЕНА', 
+            'ПЛАНЕТА_ОБМЕННИК', 'БЕСЦЕНЫЙ-ОБМЕН', 'НАМЕНЯЙТЕСЬ', 'ОБМЕННЫЙ-ПУНКТ'
+        ];
+
+        function createGroup(id, title, itemsHtml) {
+            const div = document.createElement('div');
+            div.className = 'route-group';
+            div.innerHTML = `
+                <div class="route-header">
+                    <span class="route-title">${title}</span>
+                    <span class="route-count" id="count-${id}">0 selected</span>
+                </div>
+                <div class="route-grid">${itemsHtml}</div>
+            `;
+            routesContainer.appendChild(div);
+        }
+
+        ROUTE_DATA.forEach(group => {
+            let html = '';
+            for(let i=1; i<=group.count; i++) {
+                html += `<label class="checkbox-label"><input type="checkbox" class="route-cb" data-group="${group.id}" value="${group.prefix}${i}"> ${i}</label>`;
+            }
+            createGroup(group.id, group.title, html);
+        });
+
+        let customHtml = '';
+        CUSTOM_PLANETS.forEach(p => {
+            customHtml += `<label class="checkbox-label" style="grid-column: span 2;"><input type="checkbox" class="route-cb" data-group="custom" value="${p}"> ${p}</label>`;
+        });
+        createGroup('custom', 'Trade Planets', customHtml);
+
+        function updateRouteCounts() {
+            ['ringtoss', 'cannon', 'bowling', 'custom'].forEach(grp => {
+                const checked = document.querySelectorAll(`.route-cb[data-group="${grp}"]:checked`).length;
+                document.getElementById(`count-${grp}`).innerText = `${checked} selected`;
+            });
+        }
+
+        document.addEventListener('change', (e) => {
+            if (e.target.classList.contains('route-cb')) updateRouteCounts();
+        });
+
+        document.getElementById('selectAllRoutes').addEventListener('click', () => {
+            document.querySelectorAll('.route-cb').forEach(cb => cb.checked = true);
+            updateRouteCounts();
+        });
+        
+        document.getElementById('clearAllRoutes').addEventListener('click', () => {
+            document.querySelectorAll('.route-cb').forEach(cb => cb.checked = false);
+            updateRouteCounts();
+        });
+
+        // Default checks
+        document.querySelectorAll('.route-cb[data-group="ringtoss"]').forEach((cb,i) => { if(i<10) cb.checked=true; });
+        document.querySelectorAll('.route-cb[data-group="custom"]').forEach(cb => cb.checked=true);
+        updateRouteCounts();
+
+
+        // --- UI INITIALIZATION (RULES) ---
+        const rulesContainer = document.getElementById('rulesContainer');
+        for (let i = 1; i <= 6; i++) {
+            const ruleRow = document.createElement('div');
+            ruleRow.className = 'rule-row';
+            ruleRow.innerHTML = `
+                <label class="checkbox-label" style="color:#f8fafc;" title="Enable Rule ${i}">
+                    <input type="checkbox" id="rule${i}_enable" ${i === 1 ? 'checked' : ''} style="accent-color: var(--success);"> R${i}
+                </label>
+                <select id="rule${i}_inItem" title="Incoming Item"></select>
+                <input type="number" id="rule${i}_inQty" value="4" min="0.01" step="0.01" title="Amount Required">
+                <span class="rule-separator">➡</span>
+                <input type="number" id="rule${i}_outQty" value="1" min="0.01" step="0.01" title="Amount to Give">
+                <select id="rule${i}_outItem" title="Outgoing Item"></select>
+            `;
+            rulesContainer.appendChild(ruleRow);
+
+            const inSelect = document.getElementById(`rule${i}_inItem`);
+            const outSelect = document.getElementById(`rule${i}_outItem`);
+            
+            ITEMS.forEach(item => {
+                inSelect.add(new Option(item.name, item.id, false, item.id === 8));
+                outSelect.add(new Option(item.name, item.id, false, item.id === 1));
+            });
+        }
+
+        document.getElementById('speedRange').addEventListener('input', (e) => {
+            document.getElementById('speedVal').innerText = e.target.value + 's';
+            if(state.ws && state.ws.readyState === WebSocket.OPEN) startRoaming();
+        });
+
+        // --- LOGGER & STATS ---
+        function log(msg, type = 'info') {
+            const now = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'});
+            const consoleBox = document.getElementById('console');
+            const div = document.createElement('div');
+            div.className = `log ${type}`;
+            div.innerHTML = `<span class="log-time">[${now}]</span> ${msg}`;
+            consoleBox.appendChild(div);
+            if(consoleBox.children.length > 250) consoleBox.removeChild(consoleBox.firstChild);
+            consoleBox.scrollTop = consoleBox.scrollHeight;
+        }
+
+        function updateStats(type) {
+            state.stats[type]++;
+            document.getElementById(`stat${type.charAt(0).toUpperCase() + type.slice(1)}`).innerText = state.stats[type];
+        }
+
+        function findItem(giftName) {
+            const lower = giftName.toLowerCase();
+            if (lower.includes('diamond skeleton key') || lower.includes('diamond key')) return ITEMS.find(i => i.id === 5);
+            return ITEMS.find(item => item.aliases.some(alias => lower.includes(alias)));
+        }
+
+        function extractVueData(html) {
+            const doc = new DOMParser().parseFromString(html, 'text/html');
+            const vueDiv = doc.querySelector('.vue-data');
+            return (vueDiv && vueDiv.dataset.json) ? JSON.parse(atob(vueDiv.dataset.json)) : null;
+        }
+
+        const parseHash = (e) => CryptoJS.MD5(e).toString(CryptoJS.enc.Hex).split('').reverse().join('0').substr(5, 10);
+
+        // --- CORE WEBSOCKET & AUTH ---
+        function connectServer() {
+            const rc = document.getElementById('rc').value;
+            if(!rc) return log("Error: Missing Recovery Code", "error");
+
+            if (state.ws) state.ws.close();
+            state.ws = new WebSocket('wss://cs.mobstudio.ru:6672');
+            
+            state.ws.onopen = () => {
+                document.getElementById('statusBadge').className = 'status-badge online';
+                document.getElementById('statusBadge').innerText = 'ONLINE';
+                log("Connected to server. Identifying...", "system");
+                state.ws.send(`:en IDENT ${document.getElementById('devtype').value} -2 4030 1 2 :GALA\r\n`);
+            };
+
+            state.ws.onmessage = (e) => {
+                if (e.data.includes('PING')) state.ws.send('PONG\r\n');
+
+                const parts = e.data.split(';').join(' ').split(' ');
+                
+                if (parts[0] === 'HAAAPSI') {
+                    state.haaapsi = parts[1]; 
+                    state.ws.send(`RECOVER ${rc}\r\n`);
+                } 
+                else if (parts[0] === 'REGISTER') {
+                    state.userid = parts[1];
+                    state.password = parts[2];
+                    const username = parts[3] ? parts[3].split('\r\n')[0] : 'Bot User';
+                    
+                    log(`Authenticated successfully as: ${username}`, "success");
+                    
+                    const hashedToken = parseHash(state.haaapsi);
+                    state.ws.send(`USER ${state.userid} ${state.password} ${username} ${hashedToken}\r\n`);
+                    startExchangeScanner();
+                } 
+                else if (parts[0] === '999') {
+                    state.ws.send('PHONE 1366 768 0 2 :chrome 114.0.5735.106\r\nJOIN\r\n');
+                    startRoaming();
+                }
+            };
+
+            state.ws.onclose = () => {
+                document.getElementById('statusBadge').className = 'status-badge';
+                document.getElementById('statusBadge').innerText = 'OFFLINE';
+                log("Disconnected from server. Retrying manually required.", "warning");
+                clearInterval(state.roamInterval);
+            };
+        }
+
+        // --- ROAMING LOGIC ---
+        function startRoaming() {
+            clearInterval(state.roamInterval);
+            state.roamInterval = setInterval(() => {
+                if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+                    const spamText = document.getElementById('messageText').value || 'Trade with my vending bot!';
+                    
+                    if (state.roamingList.length === 0) {
+                        const planets = [];
+                        document.querySelectorAll('.route-cb:checked').forEach(cb => {
+                            planets.push(cb.value);
+                        });
+                        
+                        if(planets.length === 0) {
+                            state.ws.send(`EMO 1018 :${spamText}\r\n`);
+                            log(`🚀 [ROAM] Standing by (No planets selected) | 💬 Broadcast fired`, "roam");
+                            return; 
+                        }
+                        
+                        state.roamingList = planets.sort(() => Math.random() - 0.5);
+                    }
+                    
+                    const next = state.roamingList.shift();
+                    state.ws.send(`JOIN ${next}\r\nEMO 1018 :${spamText}\r\n`);
+                    log(`🚀 [ROAM] Joined: ${next} | 💬 Broadcast fired`, "roam");
+                }
+            }, parseInt(document.getElementById('speedRange').value) * 1000);
+        }
+
+        // --- ADVANCED TRADE SYSTEM ---
+        
+        // FIX: Using raw strings for payload to prevent browser from overriding charset in Content-Type header.
+        async function processTrade(action, payloadStr, logMsg, logType) {
+            try {
+                await fetch(`${baseUrl}?userID=${state.userid}&password=${state.password}&a=${action}&usercur=${state.userid}&random=${Math.random()}`, {
+                    method: 'POST', 
+                    headers: headers, 
+                    body: payloadStr
+                });
+                log(logMsg, logType);
+            } catch (err) {
+                log(`API Error during ${action}: ${err.message}`, "error");
+            }
+        }
+
+        async function declineTrade(senderId, exchangeId, reason) {
+            const isAutoDecline = document.getElementById('autoDeclineToggle').checked;
+            
+            if (!isAutoDecline) {
+                log(`⚠️ Ignored Invalid Trade: ${reason} (Auto-Decline OFF)`, "warning");
+                return; 
+            }
+
+            updateStats('declined');
+            
+            // Raw string payload format
+            const payloadStr = `jad_PartID=25&jad_userID=null&jad_DeviceId=&jad_locale=en&object_id=${senderId}&exchange_id=${exchangeId}`;
+            
+            try {
+                await fetch(`${baseUrl}?userID=${state.userid}&password=${state.password}&a=gifts_exchange_decline&usercur=${state.userid}&random=${Math.random()}`, {
+                    method: 'POST', headers: headers, body: payloadStr
+                });
+                await fetch(`${baseUrl}?userID=${state.userid}&password=${state.password}&a=gifts_exchange_cancel&usercur=${state.userid}&random=${Math.random()}`, {
+                    method: 'POST', headers: headers, body: payloadStr
+                });
+                
+                log(`❌ DECLINED: ${reason}`, 'error');
+            } catch (err) {
+                log(`API Error during decline: ${err.message}`, "error");
+            }
+        }
+
+        async function acceptTrade(senderId, exchangeId, ruleNum, inAmt, reqAmt) {
+            updateStats('accepted');
+            const payloadStr = `jad_PartID=25&jad_userID=null&jad_DeviceId=&jad_locale=en&object_id=${senderId}&exchange_id=${exchangeId}`;
+            await processTrade('gifts_exchange_accept', payloadStr, `✅ [Rule ${ruleNum}] ACCEPTED: Received ${inAmt}x, User requested ${reqAmt}x`, 'success');
+        }
+
+        async function answerTrade(senderId, exchangeId, rule, inAmt, outAmt) {
+            updateStats('accepted');
+            // FIX: Manually constructed string payload to ensure older game API parses nested arrays correctly.
+            const payloadStr = `count=${outAmt}&inventory_items%5B${rule.outId}%5D=${outAmt}&jad_PartID=25&jad_userID=null&jad_DeviceId=&jad_locale=en&gifts_ids=&object_id=${senderId}&exchange_id=${exchangeId}`;
+            
+            await processTrade('gifts_exchange_answer', payloadStr, `✅ [Rule ${rule.ruleNum}] ANSWERED: Sent ${outAmt}x in return for ${inAmt}x`, 'success');
+        }
+
+        async function startExchangeScanner() {
+            const delay = ms => new Promise(res => setTimeout(res, ms));
+
+            while (true) {
+                if (!document.getElementById('scannerToggle').checked || !state.userid) {
+                    await delay(3000); continue;
+                }
+
+                try {
+                    const listRes = await fetch(`${baseUrl}?userID=${state.userid}&password=${state.password}&a=gifts_exchange_list&usercur=${state.userid}&random=${Math.random()}`, { headers });
+                    const listJson = extractVueData(await listRes.text());
+                    const exchanges = listJson?.data?.incoming?.exchanges;
+
+                    if (Array.isArray(exchanges) && exchanges.length > 0) {
+                        const rules = [];
+                        for(let i=1; i<=6; i++) {
+                            if(document.getElementById(`rule${i}_enable`).checked) {
+                                rules.push({
+                                    ruleNum: i,
+                                    inId: parseInt(document.getElementById(`rule${i}_inItem`).value),
+                                    inQty: parseFloat(document.getElementById(`rule${i}_inQty`).value) || 0.01,
+                                    outQty: parseFloat(document.getElementById(`rule${i}_outQty`).value) || 0.01,
+                                    outId: parseInt(document.getElementById(`rule${i}_outItem`).value)
+                                });
+                            }
+                        }
+
+                        for (const ex of exchanges) {
+                            if (state.processedIds.has(ex.id)) continue;
+                            state.processedIds.add(ex.id);
+                            updateStats('scanned');
+
+                            const detailRes = await fetch(`${baseUrl}?userID=${state.userid}&password=${state.password}&a=gifts_exchange_one&exchange_id=${ex.id}&usercur=${state.userid}`, {
+                                method: 'POST', headers, body: 'jad_PartID=25&jad_userID=null&jad_DeviceId=&jad_locale=en'
+                            });
+                            const detailJson = extractVueData(await detailRes.text());
+
+                            if (detailJson?.data?.exchange?.senderGifts) {
+                                const senderId = detailJson.data.exchange.senderUserId?.toString().match(/\d+/)?.[0];
+                                if (!senderId) continue;
+
+                                if (rules.length === 0) {
+                                    await declineTrade(senderId, ex.id, "Bot has no active trade rules configured.");
+                                    continue;
+                                }
+
+                                const giftsArray = Object.values(detailJson.data.exchange.senderGifts);
+                                let match = null, bestInCount = 0, bestOutCount = 0;
+                                let failReason = "Offered items do not match any active rules.";
+
+                                for (const rule of rules) {
+                                    let currentCount = giftsArray.reduce((acc, gift) => {
+                                        const item = findItem(gift.name);
+                                        return (item && item.id === rule.inId) ? acc + gift.count : acc;
+                                    }, 0);
+
+                                    if (currentCount > 0 && currentCount < rule.inQty) {
+                                        failReason = `Insufficient items for Rule ${rule.ruleNum} (Sent ${currentCount}, Needs ${rule.inQty})`;
+                                    }
+
+                                    if (currentCount >= rule.inQty) {
+                                        const calculatedReturn = Math.floor((currentCount / rule.inQty) * rule.outQty);
+                                        if (calculatedReturn >= 1) {
+                                            match = rule;
+                                            bestInCount = currentCount;
+                                            bestOutCount = calculatedReturn;
+                                            break; 
+                                        }
+                                    }
+                                }
+
+                                if (match) {
+                                    const receiverObj = detailJson.data.exchange.receiverGifts;
+                                    if (receiverObj && Object.keys(receiverObj).length > 0) {
+                                        const reqItemData = Object.values(receiverObj)[0];
+                                        const reqItem = findItem(reqItemData.name);
+                                        
+                                        if (!reqItem || reqItem.id !== match.outId) {
+                                            await declineTrade(senderId, ex.id, `Rule ${match.ruleNum} mismatch: Requested wrong return item.`);
+                                        } else if (reqItemData.count > bestOutCount) {
+                                            await declineTrade(senderId, ex.id, `Rule ${match.ruleNum} greedy request: Wanted ${reqItemData.count}x, Max allowed is ${bestOutCount}x.`);
+                                        } else {
+                                            await acceptTrade(senderId, ex.id, match.ruleNum, bestInCount, reqItemData.count);
+                                        }
+                                    } else {
+                                        await answerTrade(senderId, ex.id, match, bestInCount, bestOutCount);
+                                    }
+                                } else {
+                                    await declineTrade(senderId, ex.id, failReason);
+                                }
+                            }
+                            await delay(800); 
+                        }
+                    }
+                } catch (err) { }
+                await delay(4000);
+            }
+        }
+
+        document.getElementById('connect').addEventListener('click', connectServer);
+        document.getElementById('disconnect').addEventListener('click', () => { if(state.ws) state.ws.close(); });
+    </script>
+</body>
+</html>
